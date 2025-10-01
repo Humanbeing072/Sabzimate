@@ -1,0 +1,195 @@
+// prisma/schema.prisma
+// Schema for सब्ज़ीMATE mobile app
+// PostgreSQL example. Adjust provider / connection string as needed.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Language {
+  HINDI
+  ENGLISH
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model User {
+  id             String    @id @default(uuid())
+  name           String?
+  email          String?   @unique
+  phone          String?   @unique
+  googleId       String?   @unique
+  avatarUrl      String?
+  languagePref   Language  @default(HINDI)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  deliveryPrefs  DeliveryPreference[]
+  orders         Order[]
+  transactions   Transaction[]
+
+  @@index([phone])
+  @@index([email])
+}
+
+model DeliveryPreference {
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String
+  date          DateTime // date for which preference is set (use date-only in app)
+  wantsDelivery Boolean  // true => YES, false => NO
+  source        String?  // optional: app / sms / admin
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+model Vegetable {
+  id           String        @id @default(uuid())
+  name_en      String        // Changed from 'name'
+  name_hi      String        // New field
+  slug         String        @unique
+  unit_en      String        @default("kg") // Changed from 'unit'
+  unit_hi      String        @default("किलो") // New field
+  isAvailable  Boolean       @default(true)
+  image        String?       // Renamed from 'defaultImage' for consistency
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  dailyPrices  DailyPrice[]
+  orderItems   OrderItem[]
+
+  @@index([name_en])
+}
+
+model DailyPrice {
+  id           String   @id @default(uuid())
+  vegetable    Vegetable @relation(fields: [vegetableId], references: [id])
+  vegetableId  String
+  date         DateTime // date of this price (date-only)
+  pricePerUnit Decimal  @db.Decimal(10, 2)
+  photoUrl     String?
+  isFresh      Boolean  @default(true)
+  notes        String?
+
+  @@unique([vegetableId, date])
+  @@index([date])
+  @@index([vegetableId])
+}
+
+model Order {
+  id             String        @id @default(uuid())
+  user           User          @relation(fields: [userId], references: [id])
+  userId         String
+  createdAt      DateTime      @default(now())
+  scheduledDate  DateTime?     // date/time for delivery (if applicable)
+  status         OrderStatus   @default(PENDING)
+  isUrgent       Boolean       @default(false)
+  deliveryCharge Decimal       @db.Decimal(8, 2) @default(0)
+  totalAmount    Decimal       @db.Decimal(12, 2) @default(0)
+  paymentMethod  PaymentMethod @default(CASH)
+  paymentStatus  PaymentStatus @default(PENDING)
+  note           String?
+
+  items          OrderItem[]
+  transaction    Transaction?  @relation(fields: [transactionId], references: [id])
+  transactionId  String? @unique
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  order        Order    @relation(fields: [orderId], references: [id])
+  orderId      String
+  vegetable    Vegetable @relation(fields: [vegetableId], references: [id])
+  vegetableId  String
+  quantity     Decimal  @db.Decimal(10, 3) // allow fractional kgs
+  pricePerUnit Decimal  @db.Decimal(10, 2)
+  subtotal     Decimal  @db.Decimal(12, 2)
+
+  @@index([orderId])
+  @@index([vegetableId])
+}
+
+model Transaction {
+  id            String        @id @default(uuid())
+  user          User          @relation(fields: [userId], references: [id])
+  userId        String
+  order         Order?        @relation()
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  providerRef   String?       // external payment provider reference
+  createdAt     DateTime      @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Truck {
+  id          String        @id @default(uuid())
+  name        String
+  plateNo     String?
+  driverName  String?
+  phone       String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  locations   TruckLocation[]
+
+  @@index([plateNo])
+}
+
+model TruckLocation {
+  id        String   @id @default(uuid())
+  truck     Truck    @relation(fields: [truckId], references: [id])
+  truckId   String
+  timestamp DateTime @default(now())
+  latitude  Float
+  longitude Float
+  accuracy  Float?
+  heading   Float?
+  speed     Float?
+
+  @@index([truckId, timestamp])
+}
+
+///////////////////////////////////////
+// Views / helper notes (not actual prisma models):
+//
+// - Monthly bill can be derived by summing Order.totalAmount
+//   for a user for a given month where status = DELIVERED or CONFIRMED.
+//
+// - Live location: query TruckLocation for the latest timestamp for the active truck.
+//
+// - Yes/No daily delivery: DeliveryPreference per user + date.
+//   If not present for a date, treat as default YES (or your business rule).
+//
+///////////////////////////////////////

@@ -1,0 +1,25 @@
+
+{
+  "name": "sabzimate-prod",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "check-types": "npm run typecheck --workspaces --if-present",
+    "dev:client": "npm run dev --workspace=packages/client",
+    "dev:admin": "npm run dev --workspace=packages/admin",
+    "dev:server": "npm run dev --workspace=packages/server",
+    "build:client": "npm run build --workspace=packages/client",
+    "build:admin": "npm run build --workspace=packages/admin",
+    "db:push": "npm run db:push --workspace=packages/server",
+    "db:generate": "npm run db:generate --workspace=packages/server"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "google-auth-library": "^10.4.0"
+  }
+}
